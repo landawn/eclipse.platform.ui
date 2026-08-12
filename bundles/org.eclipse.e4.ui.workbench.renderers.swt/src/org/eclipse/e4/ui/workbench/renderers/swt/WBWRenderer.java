@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2008, 2018 IBM Corporation and others.
+ * Copyright (c) 2008, 2026 IBM Corporation and others.
  *
  * This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License 2.0
@@ -97,6 +97,7 @@ public class WBWRenderer extends SWTPartRenderer {
 
 	private static String ShellMinimizedTag = "shellMinimized"; //$NON-NLS-1$
 	private static String ShellMaximizedTag = "shellMaximized"; //$NON-NLS-1$
+	private static final String IDE_WINDOW_ID = "IDEWindow"; //$NON-NLS-1$
 
 	private class WindowSizeUpdateJob implements Runnable {
 		public List<MWindow> windowsToUpdate = new ArrayList<>();
@@ -371,7 +372,8 @@ public class WBWRenderer extends SWTPartRenderer {
 
 		int styleOverride = getStyleOverride(wbwModel) | rtlStyle;
 		if (parentShell == null) {
-			int style = styleOverride == -1 ? SWT.SHELL_TRIM | rtlStyle : styleOverride;
+			int defaultStyle = useCompactWindowHeader(wbwModel) ? SWT.RESIZE | rtlStyle : SWT.SHELL_TRIM | rtlStyle;
+			int style = styleOverride == -1 ? defaultStyle : styleOverride;
 			wbwShell = new Shell(display, style);
 			wbwModel.getTags().add("topLevel"); //$NON-NLS-1$
 		} else {
@@ -407,11 +409,20 @@ public class WBWRenderer extends SWTPartRenderer {
 			modelBounds.width = wbwModel.getWidth();
 		}
 
-		// Force the shell onto the display if it would be invisible otherwise
+		// Force the shell onto the display if it would be invisible otherwise.
+		// Compact windows have no native title bar, so keep their complete bounds in
+		// the work area; otherwise a partially visible persisted rectangle can leave
+		// the custom drag area inaccessible.
 		Display display = Display.getCurrent();
 		Monitor closestMonitor = Util.getClosestMonitor(display, Geometry.centerPoint(modelBounds));
 		Rectangle displayBounds = closestMonitor.getClientArea();
-		if (!modelBounds.intersects(displayBounds)) {
+		boolean compactWindowHeader = useCompactWindowHeader(wbwModel);
+		if (compactWindowHeader) {
+			modelBounds.width = Math.min(modelBounds.width, displayBounds.width);
+			modelBounds.height = Math.min(modelBounds.height, displayBounds.height);
+		}
+		if (!modelBounds.intersects(displayBounds)
+				|| compactWindowHeader && !isInside(modelBounds, displayBounds)) {
 			Geometry.moveInside(modelBounds, displayBounds);
 		}
 		wbwShell.setBounds(modelBounds);
@@ -485,6 +496,16 @@ public class WBWRenderer extends SWTPartRenderer {
 		}
 
 		return newWidget;
+	}
+
+	private static boolean useCompactWindowHeader(MWindow window) {
+		return "win32".equals(SWT.getPlatform()) && IDE_WINDOW_ID.equals(window.getElementId()); //$NON-NLS-1$
+	}
+
+	private static boolean isInside(Rectangle inner, Rectangle outer) {
+		return inner.x >= outer.x && inner.y >= outer.y
+				&& inner.x + inner.width <= outer.x + outer.width
+				&& inner.y + inner.height <= outer.y + outer.height;
 	}
 
 	private void setCloseHandler(MWindow window) {
@@ -652,7 +673,7 @@ public class WBWRenderer extends SWTPartRenderer {
 
 		// Populate the main menu
 		IPresentationEngine renderer = context.get(IPresentationEngine.class);
-		if (wbwModel.getMainMenu() != null) {
+		if (wbwModel.getMainMenu() != null && !useCompactWindowHeader(wbwModel)) {
 			renderer.createGui(wbwModel.getMainMenu(), me.getWidget(), null);
 			Shell shell = (Shell) me.getWidget();
 			shell.setMenuBar((Menu) wbwModel.getMainMenu().getWidget());

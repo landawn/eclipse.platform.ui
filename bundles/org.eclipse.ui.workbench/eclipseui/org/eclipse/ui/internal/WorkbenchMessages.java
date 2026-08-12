@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2005, 2020 IBM Corporation and others.
+ * Copyright (c) 2005, 2026 IBM Corporation and others.
  *
  * This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License 2.0
@@ -33,6 +33,11 @@ public class WorkbenchMessages extends NLS {
 	private static final String BUNDLE_NAME = "org.eclipse.ui.internal.messages";//$NON-NLS-1$
 
 	public static String ThemingEnabled;
+	public static String CompactWindowHeader_close;
+	public static String CompactWindowHeader_mainMenu;
+	public static String CompactWindowHeader_maximize;
+	public static String CompactWindowHeader_minimize;
+	public static String CompactWindowHeader_restore;
 
 	public static String RescaleAtRuntimeDescription;
 

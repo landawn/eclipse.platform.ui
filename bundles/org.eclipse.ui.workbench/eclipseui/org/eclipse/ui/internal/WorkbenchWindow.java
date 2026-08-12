@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2000, 2025 IBM Corporation and others.
+ * Copyright (c) 2000, 2026 IBM Corporation and others.
  *
  * This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License 2.0
@@ -216,6 +216,11 @@ public class WorkbenchWindow implements IWorkbenchWindow {
 	public static final String STATUS_LINE_ID = "org.eclipse.ui.StatusLine"; //$NON-NLS-1$
 
 	public static final String TRIM_CONTRIBUTION_URI = "bundleclass://org.eclipse.ui.workbench/org.eclipse.ui.internal.StandardTrim"; //$NON-NLS-1$
+	static final String COMPACT_MAIN_MENU_CONTROL_ID = "org.eclipse.ui.compact.mainMenu"; //$NON-NLS-1$
+	static final String COMPACT_WINDOW_CONTROLS_ID = "org.eclipse.ui.compact.windowControls"; //$NON-NLS-1$
+	private static final String IDE_WINDOW_ID = "IDEWindow"; //$NON-NLS-1$
+	private static final String COMPACT_MAIN_MENU_CONTRIBUTION_URI = "bundleclass://org.eclipse.ui.workbench/org.eclipse.ui.internal.CompactMainMenuControl"; //$NON-NLS-1$
+	private static final String COMPACT_WINDOW_CONTROLS_CONTRIBUTION_URI = "bundleclass://org.eclipse.ui.workbench/org.eclipse.ui.internal.CompactWindowControls"; //$NON-NLS-1$
 
 	private static final String COMMAND_ID_TOGGLE_COOLBAR = "org.eclipse.ui.ToggleCoolbarAction"; //$NON-NLS-1$
 
@@ -851,8 +856,23 @@ public class WorkbenchWindow implements IWorkbenchWindow {
 				renderer.linkModelToManager(mainMenu, menuManager);
 				renderer.reconcileManagerToModel(menuManager, mainMenu);
 				model.setMainMenu(mainMenu);
-				final Menu menu = (Menu) engine.createGui(mainMenu, model.getWidget(), model.getContext());
-				shell.setMenuBar(menu);
+				Control menuParent = shell;
+				if (useCompactWindowHeader()) {
+					MUIElement menuControl = modelService.find(COMPACT_MAIN_MENU_CONTROL_ID, model);
+					if (menuControl != null && !(menuControl.getWidget() instanceof Control)) {
+						MTrimBar topTrim = getTopTrim();
+						if (topTrim != null && topTrim.getWidget() != null) {
+							engine.createGui(menuControl, topTrim.getWidget(), model.getContext());
+						}
+					}
+					if (menuControl != null && menuControl.getWidget() instanceof Control control) {
+						menuParent = control;
+					}
+				}
+				final Menu menu = (Menu) engine.createGui(mainMenu, menuParent, model.getContext());
+				if (menuParent == shell) {
+					shell.setMenuBar(menu);
+				}
 
 				menuUpdater = () -> {
 					try {
@@ -1019,6 +1039,15 @@ public class WorkbenchWindow implements IWorkbenchWindow {
 		getCoolBarManager2().add(new GroupMarker(IWorkbenchActionConstants.MB_ADDITIONS));
 
 		final MTrimBar trimBar = getTopTrim();
+		if (useCompactWindowHeader()) {
+			MToolControl menuControl = (MToolControl) modelService.find(COMPACT_MAIN_MENU_CONTROL_ID, model);
+			if (menuControl == null) {
+				menuControl = modelService.createModelElement(MToolControl.class);
+				menuControl.setElementId(COMPACT_MAIN_MENU_CONTROL_ID);
+				menuControl.setContributionURI(COMPACT_MAIN_MENU_CONTRIBUTION_URI);
+				trimBar.getChildren().add(0, menuControl);
+			}
+		}
 		// TODO why aren't these added as trim contributions
 		// that would remove everything from this method except the fill(*)
 		/*
@@ -1066,6 +1095,16 @@ public class WorkbenchWindow implements IWorkbenchWindow {
 				if (!tags.contains("SHOW_RESTORE_MENU")) { //$NON-NLS-1$
 					tags.add("SHOW_RESTORE_MENU"); //$NON-NLS-1$
 				}
+			}
+		}
+
+		if (useCompactWindowHeader() && (getShell().getStyle() & SWT.TITLE) == 0) {
+			MToolControl windowControls = (MToolControl) modelService.find(COMPACT_WINDOW_CONTROLS_ID, model);
+			if (windowControls == null) {
+				windowControls = modelService.createModelElement(MToolControl.class);
+				windowControls.setElementId(COMPACT_WINDOW_CONTROLS_ID);
+				windowControls.setContributionURI(COMPACT_WINDOW_CONTROLS_CONTRIBUTION_URI);
+				trimBar.getChildren().add(windowControls);
 			}
 		}
 
@@ -2969,12 +3008,20 @@ public class WorkbenchWindow implements IWorkbenchWindow {
 	private void updateLayoutDataForContents() {
 		MTrimBar topTrim = getTopTrim();
 		if (topTrim != null) {
-			topTrim.setVisible(isToolbarVisible());
+			topTrim.setVisible(isToolbarVisible() || useCompactWindowHeader());
 			Shell shell = getShell();
 			if (shell != null && !shell.isDisposed()) {
 				shell.layout();
 			}
 		}
+	}
+
+	static boolean isCompactWindowHeader(MWindow window) {
+		return "win32".equals(SWT.getPlatform()) && IDE_WINDOW_ID.equals(window.getElementId()); //$NON-NLS-1$
+	}
+
+	private boolean useCompactWindowHeader() {
+		return isCompactWindowHeader(model);
 	}
 
 	/* package */void addBackgroundSaveListener(IBackgroundSaveListener listener) {
